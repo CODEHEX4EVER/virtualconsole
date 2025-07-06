@@ -8,7 +8,7 @@
 #include <math.h>
 
 // mmio buffer
-uint32_t mmio_size = 0x02000000;
+uint32_t mmio_size = 0x38008;
 uint8_t *mmio_image = 0;
 
 // SDL2
@@ -442,29 +442,33 @@ static uint32_t HandleException( uint32_t ir, uint32_t code )
 
 static uint32_t HandleControlStore( uint32_t addy, uint32_t val )
 {
-	if ( addy > 0x0FFFFFFF && addy < 0x12000001 ) {
-		if( addy == 0x10000000 ) //UART 8250 / 16550 Data Buffer
+	if ( addy > 0x0FFFFFFF && addy < 0x10038008 ) { //mmio
+		//UART 8250 / 16550 Data Buffer
+		if( addy == 0x10000000 )
 		{
 			printf( "%c", val );
 			fflush( stdout );
 			return 0;
 		}
-		else if( addy == 0x11004004 ) //CLNT
-			core->timermatchh = val;
-		else if( addy == 0x11004000 ) //CLNT
-			core->timermatchl = val;
+		//frame buffer swap
 		else if( addy == 0x10038004 ) {
 			memcpy(framebuffer_buffer, framebuffer_addr, FRAMEBUFFER_SIZE8);
 			return 0;
 		}
-		else if( addy == 0x11100000 ) //SYSCON (reboot, poweroff, etc.)
-		{
-			core->pc = core->pc + 4;
-			return val; // NOTE: PC will be PC of Syscon.
-		}
-		}
 		uint32_t *mmio_store_access = (uint32_t *)(mmio_image + addy - 0x10000000);
 		*mmio_store_access = val;
+		return 0;
+	}
+	// CLNT
+	if ( addy == 0x11004004 )
+		core->timermatchh = val;
+	else if ( addy == 0x11004000 )
+		core->timermatchl = val;
+	// SYSCON (reboot, poweroff, etc.)	
+	else if ( addy == 0x11100000 ) {
+		core->pc = core->pc + 4;
+		return val;
+	}
 	return 0;
 }
 
@@ -477,7 +481,8 @@ static uint32_t HandleControlLoad( uint32_t addy )
 			return 0x60 | IsKBHit();
 		else if( addy == 0x10000000 && IsKBHit() )
 			return ReadKBByte();
-		else if ( addy == 0x10038000 ) { //framebuffer vblank
+		//framebuffer vblank
+		else if ( addy == 0x10038000 ) {
 			uint32_t *vblank_ptr = (uint32_t *)(mmio_image + (0x10038000 - 0x10000000));
 			uint32_t val = *vblank_ptr;
 			*vblank_ptr = 0;
